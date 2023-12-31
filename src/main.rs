@@ -20,12 +20,16 @@ use esp_idf_svc::{
     timer::{EspTaskTimerService, EspTimerService, Task},
     wifi::{AsyncWifi, EspWifi},
 };
+
 use esp_idf_svc::{
     http::Method::Post,
     io::Read,
     wifi::{AuthMethod, ClientConfiguration, Configuration},
 };
 use log::*;
+
+use ws2812_esp32_rmt_driver::Ws2812Esp32RmtDriver;
+use ws2812_esp32_rmt_driver::RGB8;
 
 const SSID: &str = env!("ESP32_WIFI_SSID");
 const PASS: &str = env!("ESP32_WIFI_PWD");
@@ -41,6 +45,11 @@ fn main() {
     let peripherals = Peripherals::take().unwrap();
     let sysloop = EspSystemEventLoop::take().unwrap();
     let timer_service = EspTaskTimerService::new().unwrap();
+    const yellow: [u8; 3] = [120,120,0];
+    const green: [u8; 3] = [120,0,50];
+    const blue: [u8; 3] = [120,0,255];
+    let mut ws2812 = Ws2812Esp32RmtDriver::new(0, 8).unwrap();
+    ws2812.write(&yellow).unwrap();
     let _wifi = wifi(
         peripherals.modem,
         sysloop,
@@ -48,6 +57,7 @@ fn main() {
         timer_service,
     )
     .unwrap();
+    ws2812.write(&green).unwrap();
 
     let mut server = EspHttpServer::new(&Default::default()).unwrap();
 
@@ -63,7 +73,7 @@ fn main() {
         LedcDriver::new(
             peripherals.ledc.channel3,
             servo_driver,
-            peripherals.pins.gpio2,
+            peripherals.pins.gpio3,
         )
         .unwrap(),
     ));
@@ -82,21 +92,26 @@ fn main() {
             let mut buffer = [0_u8; 1024];
             let bytes_read = req.read(&mut buffer).unwrap();
             let angle_string = from_utf8(&buffer[0..bytes_read]).unwrap();
-            let times_angles: Vec<u64> = angle_string
+            let times_angles: Vec<u32> = angle_string
                 .split(",")
-                .map(|s| s.parse::<u64>().unwrap())
+                .map(|s| s.parse::<u32>().unwrap())
                 .collect();
             servo
                 .lock()
                 .unwrap()
                 .set_duty(interpolate(times_angles[0] as u32, min, max))
                 .unwrap();
+            info!("Set servo to {}", times_angles[0]);
             for i in 0..(times_angles.len() - 1) / 2 {
-                sleep(Duration::from_millis(times_angles[i * 2 + 1]));
+                let wait_time = times_angles[i * 2 + 1];
+                info!("Wait {}", wait_time);
+                sleep(Duration::from_millis(wait_time as u64));
+                let servo_angle = times_angles[i * 2 + 2];
+                info!("Set servo to {}", servo_angle);
                 servo
                     .lock()
                     .unwrap()
-                    .set_duty(interpolate(times_angles[i * 2 + 2] as u32, min, max))
+                    .set_duty(interpolate(servo_angle as u32, min, max))
                     .unwrap();
             }
             Ok(())

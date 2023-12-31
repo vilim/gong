@@ -28,6 +28,7 @@ log = { version = "0.4", default-features = false }
 esp-idf-svc = { version = "0.47.3", default-features = false }
 futures = "0.3.29"
 anyhow = "1.0.75"
+ws2812-esp32-rmt-driver = "0.6.0"
 
 [build-dependencies]
 embuild = "0.31.3"
