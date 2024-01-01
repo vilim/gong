@@ -5,9 +5,7 @@ use std::{
     time::Duration,
 };
 
-use esp_idf_svc::hal::units::*;
 use esp_idf_svc::hal::{
-    gpio::PinDriver,
     ledc::{config::TimerConfig, LedcDriver, LedcTimerDriver},
     peripheral::Peripheral,
     prelude::Peripherals,
@@ -20,19 +18,33 @@ use esp_idf_svc::{
     timer::{EspTaskTimerService, EspTimerService, Task},
     wifi::{AsyncWifi, EspWifi},
 };
+use esp_idf_svc::{
+    hal::units::*,
+    netif::{EspNetif, NetifConfiguration},
+};
 
 use esp_idf_svc::{
     http::Method::Post,
-    io::Read,
     wifi::{AuthMethod, ClientConfiguration, Configuration},
 };
 use log::*;
 
 use ws2812_esp32_rmt_driver::Ws2812Esp32RmtDriver;
-use ws2812_esp32_rmt_driver::RGB8;
 
+use esp_idf_svc::ipv4::{
+    ClientConfiguration as IpClientConfiguration, ClientSettings as IpClientSettings,
+    Configuration as IpConfiguration, Ipv4Addr, Mask, Subnet,
+};
+
+// Set these env variables in a config file not commited to git
+// e.g. ~/.cargo/config.toml
 const SSID: &str = env!("ESP32_WIFI_SSID");
 const PASS: &str = env!("ESP32_WIFI_PWD");
+const STATIC_IP: &str = env!("ESP32_STATIC_IP");
+const GATEWAY_IP: &str = env!("ESP32_GATEWAY_IP");
+
+const YELLOW: [u8; 3] = [120, 120, 0];
+const GREEN: [u8; 3] = [120, 0, 10];
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -42,14 +54,16 @@ fn main() {
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
+    // Set up the LED
+    let mut ws2812 = Ws2812Esp32RmtDriver::new(0, 8).unwrap();
+
+    // The LED glows yellow while WiFi is connecting
+    ws2812.write(&YELLOW).unwrap();
+
+    // Set up WiFi
     let peripherals = Peripherals::take().unwrap();
     let sysloop = EspSystemEventLoop::take().unwrap();
     let timer_service = EspTaskTimerService::new().unwrap();
-    const yellow: [u8; 3] = [120,120,0];
-    const green: [u8; 3] = [120,0,50];
-    const blue: [u8; 3] = [120,0,255];
-    let mut ws2812 = Ws2812Esp32RmtDriver::new(0, 8).unwrap();
-    ws2812.write(&yellow).unwrap();
     let _wifi = wifi(
         peripherals.modem,
         sysloop,
@@ -57,10 +71,16 @@ fn main() {
         timer_service,
     )
     .unwrap();
-    ws2812.write(&green).unwrap();
 
+    // Then the LED turns green
+    ws2812.write(&GREEN).unwrap();
+
+    // Set up the server to recive POST requests
     let mut server = EspHttpServer::new(&Default::default()).unwrap();
 
+    // Set up the servo motor
+    // the servo code is adapted from
+    // https://github.com/flyaruu/rust-on-esp32/tree/5c66fb73a0369ca8b04d0fa4e7d1af330acefb53
     let servo_timer = peripherals.ledc.timer1;
     let servo_driver = LedcTimerDriver::new(
         servo_timer,
@@ -92,6 +112,8 @@ fn main() {
             let mut buffer = [0_u8; 1024];
             let bytes_read = req.read(&mut buffer).unwrap();
             let angle_string = from_utf8(&buffer[0..bytes_read]).unwrap();
+
+            // Parse the request of the form ({angle},{pause},)*{angle}
             let times_angles: Vec<u32> = angle_string
                 .split(",")
                 .map(|s| s.parse::<u32>().unwrap())
@@ -160,6 +182,38 @@ async fn connect_wifi(wifi: &mut AsyncWifi<EspWifi<'static>>) -> anyhow::Result<
 
     wifi.set_configuration(&wifi_configuration)?;
 
+    // Setting up static IP configuration
+    // perhaps an easier solution is possible,
+    // this seemed to be the simplest one with the high-level driver is possible
+
+    let ipconfig = IpConfiguration::Client(IpClientConfiguration::Fixed(IpClientSettings {
+        ip: Ipv4Addr::from(parse_ip(STATIC_IP)),
+        subnet: Subnet {
+            gateway: Ipv4Addr::from(parse_ip(GATEWAY_IP)),
+            mask: Mask(24),
+        },
+        dns: None,
+        secondary_dns: None,
+    }));
+
+    let netif_config = NetifConfiguration {
+        ip_configuration: ipconfig,
+        key: "StaticClient".into(),
+        ..NetifConfiguration::wifi_default_client()
+    };
+
+    let netif_ap_config = NetifConfiguration {
+        key: "StaticAP".into(),
+        ..NetifConfiguration::wifi_default_router()
+    };
+
+    wifi.wifi_mut()
+        .swap_netif(
+            EspNetif::new_with_conf(&netif_config).unwrap(),
+            EspNetif::new_with_conf(&netif_ap_config).unwrap(),
+        )
+        .unwrap();
+
     wifi.start().await?;
     info!("Wifi started");
 
@@ -170,4 +224,12 @@ async fn connect_wifi(wifi: &mut AsyncWifi<EspWifi<'static>>) -> anyhow::Result<
     info!("Wifi netif up");
 
     Ok(())
+}
+
+fn parse_ip(ip: &str) -> [u8; 4] {
+    let mut result = [0u8; 4];
+    for (idx, octet) in ip.split(".").into_iter().enumerate() {
+        result[idx] = u8::from_str_radix(octet, 10).unwrap();
+    }
+    result
 }

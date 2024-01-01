@@ -1,77 +1,9 @@
-# gong
+# Simple ESP32 remote-controled mechanical gong
 
-## Dev Containers
-This repository offers Dev Containers supports for:
--  [VS Code Dev Containers](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container)
--  [GitHub Codespaces](https://docs.github.com/en/codespaces/developing-in-codespaces/creating-a-codespace)
-> **Note**
->
-> In [order to use GitHub Codespaces](https://github.com/features/codespaces#faq)
-> the project needs to be published in a GitHub repository and the user needs
-> to be part of the Codespaces beta or have the project under an organization.
+## Hardware
+Just an [ESP32 C6 dev board](https://docs.espressif.com/projects/espressif-esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/index.html), another one would do as well and a servo motor directly connected to the dev board (as the layout of the GND, 5V and a GPIO pin allows for that). It can be powered by any 5V USB power supply.
+The rest is a wooden holder for the gong, a mallet directly attached to the servo (this part will require improvements). The onboard LED just indicates WiFi status (yellow - connecting, green - connected)
 
-If using VS Code or GitHub Codespaces, you can pull the image instead of building it
-from the Dockerfile by selecting the `image` property instead of `build` in
-`.devcontainer/devcontainer.json`. Further customization of the Dev Container can
-be achived, see [.devcontainer.json reference](https://code.visualstudio.com/docs/remote/devcontainerjson-reference).
-
-When using Dev Containers, some tooling to facilitate building, flashing and
-simulating in Wokwi is also added.
-### Build
-- Terminal approach:
-
-    ```
-    scripts/build.sh  [debug | release]
-    ```
-    > If no argument is passed, `release` will be used as default
-
-
--  UI approach:
-
-    The default build task is already set to build the project, and it can be used
-    in VS Code and GitHub Codespaces:
-    - From the [Command Palette](https://code.visualstudio.com/docs/getstarted/userinterface#_command-palette) (`Ctrl-Shift-P` or `Cmd-Shift-P`) run the `Tasks: Run Build Task` command.
-    - `Terminal`-> `Run Build Task` in the menu.
-    - With `Ctrl-Shift-B` or `Cmd-Shift-B`.
-    - From the [Command Palette](https://code.visualstudio.com/docs/getstarted/userinterface#_command-palette) (`Ctrl-Shift-P` or `Cmd-Shift-P`) run the `Tasks: Run Task` command and
-    select `Build`.
-    - From UI: Press `Build` on the left side of the Status Bar.
-
-### Flash
-
-> **Note**
->
-> When using GitHub Codespaces, we need to make the ports
-> public, [see instructions](https://docs.github.com/en/codespaces/developing-in-codespaces/forwarding-ports-in-your-codespace#sharing-a-port).
-
-- Terminal approach:
-  - Using `flash.sh` script:
-
-    ```
-    scripts/flash.sh [debug | release]
-    ```
-    > If no argument is passed, `release` will be used as default
-
-- UI approach:
-    - From the [Command Palette](https://code.visualstudio.com/docs/getstarted/userinterface#_command-palette) (`Ctrl-Shift-P` or `Cmd-Shift-P`) run the `Tasks: Run Task` command and
-    select `Build & Flash`.
-    - From UI: Press `Build & Flash` on the left side of the Status Bar.
-- Any alternative flashing method from host machine.
-
-
-### Wokwi Simulation
-
-#### VS Code Dev Containers and GitHub Codespaces
-
-The Dev Container includes the Wokwi Vs Code installed, hence you can simulate your built projects doing the following:
-1. Press `F1`
-2. Run `Wokwi: Start Simulator`
-
-> **Note**
->
->  We assume that the project is built in `debug` mode, if you want to simulate projects in release, please update the `elf` and  `firmware` proprieties in `wokwi.toml`.
-
-For more information and details on how to use the Wokwi extension, see [Getting Started] and [Debugging your code] Chapter of the Wokwi documentation.
-
-[Getting Started]: https://docs.wokwi.com/vscode/getting-started
-[Debugging your code]: https://docs.wokwi.com/vscode/debugging
+## Software
+Hacked together from different ESP32 Rust examples, mainly [this one](https://github.com/ivmarkov/rust-esp32-std-demo), the [servo one](https://github.com/flyaruu/rust-on-esp32) and from the the addressable LED (ws2812-esp32-rmt-driver) crate.
+After installing the toolchain with `espup`, the environment variables for WiFi have to be set and then uploading should work directly with `cargo run` (when espflash works).
